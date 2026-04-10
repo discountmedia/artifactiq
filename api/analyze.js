@@ -43,7 +43,7 @@ async function analyzeWithGemini(imageBase64, mimeType, apiKey) {
             { inline_data: { mime_type: mimeType, data: imageBase64 } }
           ]
         }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 1500 }
+        generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
       })
     }
   );
@@ -67,7 +67,7 @@ async function analyzeWithOpenAI(imageBase64, mimeType, apiKey) {
     },
     body: JSON.stringify({
       model: 'gpt-4o',
-      max_tokens: 1500,
+      max_tokens: 4096,
       temperature: 0.1,
       messages: [{
         role: 'user',
