@@ -1,5 +1,6 @@
+import { GoogleGenAI } from "@google/genai";
+
 export default async function handler(req, res) {
-  // Handle CORS preflight
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -15,6 +16,8 @@ export default async function handler(req, res) {
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) return res.status(500).json({ error: 'OpenAI API key not configured' });
 
+      const landscapePrompt = prompt + ' Landscape orientation.';
+
       if (imageBase64) {
         const imgMime = mimeType || 'image/jpeg';
         const ext = imgMime.includes('png') ? 'png' : 'jpg';
@@ -22,9 +25,9 @@ export default async function handler(req, res) {
 
         const formData = new FormData();
         formData.append('model', 'gpt-image-1');
-        formData.append('prompt', prompt);
+        formData.append('prompt', landscapePrompt);
         formData.append('n', '1');
-        formData.append('size', '1792x1024'); // 16:9
+        formData.append('size', 'auto');
         const blob = new Blob([imageBuffer], { type: imgMime });
         formData.append('image[]', blob, `original.${ext}`);
 
@@ -46,11 +49,10 @@ export default async function handler(req, res) {
         return res.status(200).json({ imageBase64: imageB64, imageUrl });
       }
 
-      // Fallback: no image
       const response = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: 'gpt-image-1', prompt, n: 1, size: '1792x1024' })
+        body: JSON.stringify({ model: 'gpt-image-1', prompt: landscapePrompt, n: 1, size: 'auto' })
       });
 
       if (!response.ok) {
@@ -68,48 +70,37 @@ export default async function handler(req, res) {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) return res.status(500).json({ error: 'Gemini API key not configured' });
 
-      const parts = [{ text: prompt }];
+      const ai = new GoogleGenAI({ apiKey });
+
+      // Build prompt array exactly like Google's example
+      const promptParts = [
+        { text: prompt + ' Landscape orientation.' }
+      ];
 
       if (imageBase64) {
-        parts.push({
-          inline_data: {
-            mime_type: mimeType || 'image/jpeg',
+        promptParts.push({
+          inlineData: {
+            mimeType: mimeType || 'image/jpeg',
             data: imageBase64
           }
         });
       }
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: {
-              responseModalities: ['TEXT', 'IMAGE'],
-              imageConfig: {
-                aspectRatio: '16:9'
-              }
-            }
-          })
-        }
-      );
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-image-preview',
+        contents: promptParts
+      });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error?.message || `Gemini error ${response.status}`);
+      // Find image part in response
+      const parts = response.candidates?.[0]?.content?.parts || [];
+      const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
+
+      if (!imagePart) {
+        const textContent = parts.filter(p => p.text).map(p => p.text).join(' ');
+        throw new Error(`No image in Nano Banana response. Model said: ${textContent.substring(0, 300)}`);
       }
 
-      const data = await response.json();
-
-      const imagePart = data.candidates?.[0]?.content?.parts?.find(
-        p => p.inline_data && p.inline_data.mime_type?.startsWith('image/') && !p.thought
-      );
-
-      if (!imagePart) throw new Error('No image returned from Nano Banana 2');
-
-      return res.status(200).json({ imageBase64: imagePart.inline_data.data });
+      return res.status(200).json({ imageBase64: imagePart.inlineData.data });
 
     } else {
       return res.status(400).json({ error: 'Invalid engine. Use "dalle" or "gemini"' });
