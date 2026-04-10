@@ -1,3 +1,10 @@
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '100mb'
+    }
+  }
+};
 const PROMPT = `You are an expert AI image quality control system specializing in industrial equipment photography and human subjects. Analyze this AI-generated image for visual artifacts and anomalies.
 
 Perform a thorough inspection and respond ONLY with a valid JSON object in this exact format:
