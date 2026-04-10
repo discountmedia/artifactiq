@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ArtifactIQ — Dual AI Image QC</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface2: #1a1a1a;
+      --border: #2a2a2a;
+      --accent: #e8ff00;
+      --pass: #00ff88;
+      --warn: #ffaa00;
+      --fail: #ff2244;
+      --text: #f0f0f0;
+      --muted: #666;
+      --font-display: 'Syne', sans-serif;
+      --font-mono: 'Space Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(232,255,0,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(232,255,0,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 48px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+    }
+
+    .logo { font-family: var(--font-display); font-weight: 800; font-size: 28px; letter-spacing: -1px; }
+    .logo span { color: var(--accent); }
+
+    .badges { display: flex; gap: 8px; margin-top: 6px; }
+    .badge {
+      font-size: 10px;
+      background: var(--accent);
+      color: #000;
+      padding: 2px 8px;
+      font-weight: 700;
+      letter-spacing: 2px;
+    }
+    .badge.dual { background: #fff; }
+
+    .upload-zone {
+      border: 2px dashed var(--border);
+      padding: 60px 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      margin-bottom: 24px;
+      background: var(--surface);
+    }
+
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(232,255,0,0.03);
+    }
+
+    .upload-icon { font-size: 48px; margin-bottom: 16px; display: block; }
+    .upload-title { font-family: var(--font-display); font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+    .upload-sub { font-size: 12px; color: var(--muted); letter-spacing: 1px; }
+
+    input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+    .preview-area { display: none; gap: 24px; margin-bottom: 24px; }
+    .preview-area.visible { display: flex; }
+
+    .preview-img-wrap { flex: 1; }
+    .preview-img-wrap img {
+      width: 100%;
+      max-height: 400px;
+      object-fit: contain;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      display: block;
+    }
+
+    .preview-meta { width: 180px; display: flex; flex-direction: column; gap: 12px; }
+    .meta-item { background: var(--surface); border: 1px solid var(--border); padding: 12px; }
+    .meta-label { font-size: 10px; color: var(--muted); letter-spacing: 2px; margin-bottom: 4px; }
+    .meta-value { font-size: 13px; }
+
+    .btn-analyze {
+      width: 100%;
+      padding: 18px;
+      background: var(--accent);
+      color: #000;
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      margin-bottom: 32px;
+    }
+
+    .btn-analyze:hover { background: #fff; }
+    .btn-analyze:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+
+    .loading { display: none; text-align: center; padding: 40px; }
+    .loading.visible { display: block; }
+
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-size: 12px; color: var(--muted); letter-spacing: 3px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .loading-sub { font-size: 11px; color: var(--muted); margin-top: 8px; opacity: 0.6; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .results { display: none; }
+    .results.visible { display: block; }
+
+    /* Main verdict */
+    .verdict-banner {
+      padding: 24px 32px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .verdict-banner.pass { background: rgba(0,255,136,0.08); border: 2px solid var(--pass); }
+    .verdict-banner.review { background: rgba(255,170,0,0.08); border: 2px solid var(--warn); }
+    .verdict-banner.fail { background: rgba(255,34,68,0.08); border: 2px solid var(--fail); }
+
+    .verdict-icon { font-size: 48px; }
+    .verdict-meta { flex: 1; }
+    .verdict-label { font-size: 11px; letter-spacing: 3px; margin-bottom: 4px; color: var(--muted); }
+    .verdict-title { font-family: var(--font-display); font-size: 36px; font-weight: 800; }
+
+    .verdict-banner.pass .verdict-title { color: var(--pass); }
+    .verdict-banner.review .verdict-title { color: var(--warn); }
+    .verdict-banner.fail .verdict-title { color: var(--fail); }
+
+    .verdict-stats { display: flex; gap: 24px; }
+    .stat { text-align: center; }
+    .stat-num { font-family: var(--font-display); font-size: 28px; font-weight: 800; }
+    .stat-label { font-size: 10px; color: var(--muted); letter-spacing: 2px; }
+
+    /* Agreement indicator */
+    .agreement-bar {
+      padding: 12px 20px;
+      margin-bottom: 24px;
+      font-size: 11px;
+      letter-spacing: 2px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .agreement-bar.full { background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); color: var(--pass); }
+    .agreement-bar.partial { background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); color: var(--warn); }
+    .agreement-bar.single { background: rgba(100,100,100,0.05); border: 1px solid var(--border); color: var(--muted); }
+
+    /* Individual AI results */
+    .ai-panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .ai-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 20px 16px 16px;
+      position: relative;
+    }
+
+    .ai-panel::before {
+      position: absolute;
+      top: -10px;
+      left: 12px;
+      background: var(--bg);
+      font-size: 10px;
+      letter-spacing: 3px;
+      padding: 0 8px;
+    }
+
+    .ai-panel.gemini::before { content: 'GEMINI'; color: #4285f4; }
+    .ai-panel.openai::before { content: 'GPT-4O'; color: #10a37f; }
+
+    .ai-verdict {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .ai-verdict.pass { color: var(--pass); }
+    .ai-verdict.review { color: var(--warn); }
+    .ai-verdict.fail { color: var(--fail); }
+
+    .ai-confidence { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+    .ai-summary { font-size: 11px; color: #aaa; line-height: 1.7; }
+
+    /* Checklist */
+    .checklist-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      margin-bottom: 24px;
+      position: relative;
+    }
+
+    .checklist-section::before {
+      content: 'ARTIFACT CHECKLIST';
+      position: absolute;
+      top: -10px;
+      left: 16px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 3px;
+      padding: 0 8px;
+    }
+
+    .checklist-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      padding: 24px 20px 20px;
+    }
+
+    .check-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .check-item:nth-last-child(-n+2) { border-bottom: none; }
+
+    .check-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 2px; }
+    .check-dot.ok { background: var(--pass); }
+    .check-dot.warn { background: var(--warn); }
+    .check-dot.bad { background: var(--fail); }
+    .check-dot.skip { background: var(--muted); }
+
+    .check-body { flex: 1; }
+    .check-text { margin-bottom: 2px; }
+    .check-note { font-size: 10px; color: var(--muted); line-height: 1.5; }
+
+    .check-status { font-size: 10px; letter-spacing: 1px; white-space: nowrap; }
+    .check-status.ok { color: var(--pass); }
+    .check-status.warn { color: var(--warn); }
+    .check-status.bad { color: var(--fail); }
+    .check-status.skip { color: var(--muted); }
+
+    /* Issues */
+    .issues-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 24px 20px 20px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+
+    .issues-section::before {
+      content: 'FLAGGED ISSUES';
+      position: absolute;
+      top: -10px;
+      left: 16px;
+      background: var(--bg);
+      color: var(--fail);
+      font-size: 10px;
+      letter-spacing: 3px;
+      padding: 0 8px;
+    }
+
+    .issue-item {
+      display: flex;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .issue-item:last-child { border-bottom: none; }
+    .issue-num { color: var(--fail); font-weight: 700; min-width: 20px; }
+
+    /* Warning */
+    .warning-box {
+      background: rgba(255,170,0,0.08);
+      border: 1px solid rgba(255,170,0,0.3);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      color: var(--warn);
+      display: none;
+    }
+
+    .warning-box.visible { display: block; }
+
+    .error-box {
+      background: rgba(255,34,68,0.08);
+      border: 1px solid var(--fail);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: var(--fail);
+      display: none;
+    }
+
+    .error-box.visible { display: block; }
+
+    .btn-reset {
+      width: 100%;
+      padding: 14px;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 2px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      margin-top: 8px;
+    }
+
+    .btn-reset:hover { border-color: var(--text); color: var(--text); }
+
+    @media (max-width: 640px) {
+      .checklist-grid, .ai-panels { grid-template-columns: 1fr; }
+      .preview-area { flex-direction: column; }
+      .preview-meta { width: 100%; }
+      .verdict-stats { gap: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <div class="logo">Artifact<span>IQ</span></div>
+        <div class="badges">
+          <div class="badge">AI IMAGE QC</div>
+          <div class="badge dual">DUAL SCAN</div>
+        </div>
+      </div>
+      <div style="text-align:right; font-size:11px; color:var(--muted); line-height:1.8;">
+        Gemini 1.5 Flash + GPT-4o<br>
+        Forklift + Operator Analysis
+      </div>
+    </header>
+
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept="image/*" />
+      <span class="upload-icon">⬆</span>
+      <div class="upload-title">Drop image or click to upload</div>
+      <div class="upload-sub">JPG · PNG · WEBP · Max 10MB</div>
+    </div>
+
+    <div class="preview-area" id="previewArea">
+      <div class="preview-img-wrap">
+        <img id="previewImg" src="" alt="Preview" />
+      </div>
+      <div class="preview-meta">
+        <div class="meta-item">
+          <div class="meta-label">FILENAME</div>
+          <div class="meta-value" id="metaName">—</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">SIZE</div>
+          <div class="meta-value" id="metaSize">—</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">STATUS</div>
+          <div class="meta-value" id="metaStatus">Ready</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-analyze" id="analyzeBtn" disabled>▶ Run Dual Scan</button>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">RUNNING DUAL SCAN...</div>
+      <div class="loading-sub">Querying Gemini + GPT-4o simultaneously</div>
+    </div>
+
+    <div class="results" id="results">
+
+      <!-- Warning if only one AI worked -->
+      <div class="warning-box" id="warningBox"></div>
+
+      <!-- Agreement indicator -->
+      <div class="agreement-bar" id="agreementBar">
+        <span id="agreementIcon"></span>
+        <span id="agreementText"></span>
+      </div>
+
+      <!-- Main verdict -->
+      <div class="verdict-banner" id="verdictBanner">
+        <div class="verdict-icon" id="verdictIcon"></div>
+        <div class="verdict-meta">
+          <div class="verdict-label">COMBINED VERDICT</div>
+          <div class="verdict-title" id="verdictTitle"></div>
+        </div>
+        <div class="verdict-stats">
+          <div class="stat">
+            <div class="stat-num" id="confidenceNum"></div>
+            <div class="stat-label">CONFIDENCE</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Individual AI panels -->
+      <div class="ai-panels" id="aiPanels"></div>
+
+      <!-- Checklist -->
+      <div class="checklist-section">
+        <div class="checklist-grid" id="checklistGrid"></div>
+      </div>
+
+      <!-- Issues -->
+      <div class="issues-section" id="issuesSection">
+        <div id="issuesList"></div>
+      </div>
+
+      <button class="btn-reset" id="resetBtn">↩ Analyze Another Image</button>
+    </div>
+  </div>
+
+  <script>
+    let currentFile = null;
+    let currentBase64 = null;
+
+    const fileInput = document.getElementById('fileInput');
+    const uploadZone = document.getElementById('uploadZone');
+    const previewArea = document.getElementById('previewArea');
+    const previewImg = document.getElementById('previewImg');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+    const errorBox = document.getElementById('errorBox');
+
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+    uploadZone.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+    function handleFile(file) {
+      if (!file.type.startsWith('image/')) return showError('Please upload an image file.');
+      if (file.size > 10 * 1024 * 1024) return showError('File too large. Max 10MB.');
+      currentFile = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        currentBase64 = e.target.result.split(',')[1];
+        previewImg.src = e.target.result;
+        document.getElementById('metaName').textContent = file.name.length > 20 ? file.name.substring(0,18)+'...' : file.name;
+        document.getElementById('metaSize').textContent = (file.size / 1024).toFixed(0) + ' KB';
+        document.getElementById('metaStatus').textContent = 'Ready';
+        previewArea.classList.add('visible');
+        analyzeBtn.disabled = false;
+        hideError();
+        results.classList.remove('visible');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    analyzeBtn.addEventListener('click', analyzeImage);
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      currentFile = null; currentBase64 = null;
+      previewArea.classList.remove('visible');
+      results.classList.remove('visible');
+      loading.classList.remove('visible');
+      analyzeBtn.disabled = true;
+      fileInput.value = '';
+      hideError();
+    });
+
+    function showError(msg) { errorBox.textContent = msg; errorBox.classList.add('visible'); }
+    function hideError() { errorBox.classList.remove('visible'); }
+
+    async function analyzeImage() {
+      if (!currentBase64) return showError('Please upload an image first.');
+      hideError();
+      analyzeBtn.disabled = true;
+      loading.classList.add('visible');
+      results.classList.remove('visible');
+      document.getElementById('metaStatus').textContent = 'Scanning...';
+
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: currentBase64, mimeType: currentFile.type || 'image/jpeg' })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Analysis failed');
+        renderResults(data);
+      } catch (err) {
+        showError('Analysis failed: ' + err.message);
+        document.getElementById('metaStatus').textContent = 'Error';
+      } finally {
+        loading.classList.remove('visible');
+        analyzeBtn.disabled = false;
+      }
+    }
+
+    function renderResults(data) {
+      // Warning
+      const warningBox = document.getElementById('warningBox');
+      if (data.warning) {
+        warningBox.textContent = '⚠ ' + data.warning;
+        warningBox.classList.add('visible');
+      } else {
+        warningBox.classList.remove('visible');
+      }
+
+      // Agreement bar
+      const agreementBar = document.getElementById('agreementBar');
+      const agreementIcon = document.getElementById('agreementIcon');
+      const agreementText = document.getElementById('agreementText');
+
+      agreementBar.className = 'agreement-bar';
+      if (data.source === 'dual') {
+        if (data.agreement === 'full') {
+          agreementBar.classList.add('full');
+          agreementIcon.textContent = '●';
+          agreementText.textContent = 'BOTH AIs AGREE — HIGH CONFIDENCE RESULT';
+        } else {
+          agreementBar.classList.add('partial');
+          agreementIcon.textContent = '◐';
+          agreementText.textContent = 'AIs DISAGREE — HUMAN REVIEW RECOMMENDED';
+        }
+      } else {
+        agreementBar.classList.add('single');
+        agreementIcon.textContent = '○';
+        agreementText.textContent = `SINGLE AI RESULT (${data.source === 'gemini_only' ? 'GEMINI' : 'GPT-4O'} ONLY)`;
+      }
+
+      // Main verdict
+      const banner = document.getElementById('verdictBanner');
+      const icon = document.getElementById('verdictIcon');
+      const title = document.getElementById('verdictTitle');
+      const v = data.verdict;
+
+      banner.className = 'verdict-banner';
+      banner.classList.add(v === 'PASS' ? 'pass' : v === 'REVIEW' ? 'review' : 'fail');
+      icon.textContent = v === 'PASS' ? '✓' : v === 'REVIEW' ? '⚠' : '✕';
+      title.textContent = v;
+      document.getElementById('confidenceNum').textContent = (data.confidence || 0) + '%';
+
+      // Individual AI panels
+      const aiPanels = document.getElementById('aiPanels');
+      aiPanels.innerHTML = '';
+
+      if (data.individual) {
+        ['gemini', 'openai'].forEach(key => {
+          const ai = data.individual[key];
+          if (!ai) return;
+          const label = key === 'gemini' ? 'Gemini' : 'GPT-4o';
+          const vClass = ai.verdict === 'PASS' ? 'pass' : ai.verdict === 'REVIEW' ? 'review' : 'fail';
+          const panel = document.createElement('div');
+          panel.className = `ai-panel ${key}`;
+          panel.innerHTML = `
+            <div class="ai-verdict ${vClass}">${ai.verdict}</div>
+            <div class="ai-confidence">${label} · ${ai.confidence}% confidence</div>
+            <div class="ai-summary">${ai.summary || ''}</div>
+          `;
+          aiPanels.appendChild(panel);
+        });
+      }
+
+      // Checklist
+      const checkLabels = {
+        limb_count: 'Limb Count', finger_detail: 'Finger Detail', face_anatomy: 'Face Anatomy',
+        forklift_forks: 'Forklift Forks', forklift_mast: 'Forklift Mast', operator_seat: 'Operator Seat',
+        wheel_count: 'Wheel Count', duplicate_objects: 'Duplicate Objects', text_legibility: 'Text / Labels',
+        lighting_shadows: 'Lighting & Shadows', background_coherence: 'Background', proportions: 'Proportions'
+      };
+      const statusMap = { ok: '✓ OK', warn: '⚠ WARN', bad: '✕ FAIL', skip: '— N/A' };
+
+      const grid = document.getElementById('checklistGrid');
+      grid.innerHTML = '';
+
+      if (data.checks) {
+        Object.entries(data.checks).forEach(([key, val]) => {
+          const item = document.createElement('div');
+          item.className = 'check-item';
+          item.innerHTML = `
+            <div class="check-dot ${val.status}"></div>
+            <div class="check-body">
+              <div class="check-text">${checkLabels[key] || key}</div>
+              ${val.note ? `<div class="check-note">${val.note}</div>` : ''}
+            </div>
+            <span class="check-status ${val.status}">${statusMap[val.status] || val.status}</span>
+          `;
+          grid.appendChild(item);
+        });
+      }
+
+      // Issues
+      const issuesSection = document.getElementById('issuesSection');
+      const issuesList = document.getElementById('issuesList');
+      issuesList.innerHTML = '';
+
+      if (data.issues && data.issues.length > 0) {
+        issuesSection.style.display = 'block';
+        data.issues.forEach((issue, i) => {
+          const item = document.createElement('div');
+          item.className = 'issue-item';
+          item.innerHTML = `<span class="issue-num">${String(i+1).padStart(2,'0')}</span><span>${issue}</span>`;
+          issuesList.appendChild(item);
+        });
+      } else {
+        issuesSection.style.display = 'none';
+      }
+
+      document.getElementById('metaStatus').textContent = v;
+      results.classList.add('visible');
+      results.scrollIntoView({ behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>
