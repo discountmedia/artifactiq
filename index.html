@@ -846,7 +846,8 @@
     }
 
     function maybeShowRegen() {
-      if (!checkAllFilled()) return;
+      const hasConfirmed = Object.values(itemOverrides).some(v => v.action === 'confirm');
+      if (!hasConfirmed) return;
       const prompt = buildAutoPrompt(currentData);
       document.getElementById('regenPrompt').value = prompt;
       document.getElementById('regenSection').classList.add('visible');
@@ -1002,7 +1003,32 @@
       img.onload = () => {
         const canvas = document.createElement('canvas');
         canvas.width = TARGET_W; canvas.height = TARGET_H;
-        canvas.getContext('2d').drawImage(img, 0, 0, TARGET_W, TARGET_H);
+
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, TARGET_W, TARGET_H);
+
+        // Center crop to fill target dimensions without stretching
+        const srcRatio = img.width / img.height;
+        const tgtRatio = TARGET_W / TARGET_H;
+
+        let sx, sy, sw, sh;
+        if (srcRatio > tgtRatio) {
+          // Image is wider — crop sides
+          sh = img.height;
+          sw = Math.round(img.height * tgtRatio);
+          sx = Math.round((img.width - sw) / 2);
+          sy = 0;
+        } else {
+          // Image is taller — crop top/bottom
+          sw = img.width;
+          sh = Math.round(img.width / tgtRatio);
+          sx = 0;
+          sy = Math.round((img.height - sh) / 2);
+        }
+
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, TARGET_W, TARGET_H);
+
         let quality = 0.9;
         function tryCompress() {
           const dataUrl = canvas.toDataURL('image/jpeg', quality);

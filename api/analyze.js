@@ -43,7 +43,7 @@ async function analyzeWithGemini(imageBase64, mimeType, apiKey) {
             { inline_data: { mime_type: mimeType, data: imageBase64 } }
           ]
         }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 1500 }
+        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
       })
     }
   );
@@ -55,7 +55,12 @@ async function analyzeWithGemini(imageBase64, mimeType, apiKey) {
 
   const data = await response.json();
   const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  return JSON.parse(raw.replace(/```json|```/g, '').trim());
+  let cleaned = raw.replace(/```json|```/g, '').trim();
+// If JSON is truncated, attempt to close it
+if (!cleaned.endsWith('}')) {
+  cleaned = cleaned.replace(/,\s*$/, '') + '}}';
+}
+return JSON.parse(cleaned);
 }
 
 async function analyzeWithOpenAI(imageBase64, mimeType, apiKey) {
@@ -86,7 +91,12 @@ async function analyzeWithOpenAI(imageBase64, mimeType, apiKey) {
 
   const data = await response.json();
   const raw = data.choices?.[0]?.message?.content || '';
-  return JSON.parse(raw.replace(/```json|```/g, '').trim());
+  let cleaned = raw.replace(/```json|```/g, '').trim();
+// If JSON is truncated, attempt to close it
+if (!cleaned.endsWith('}')) {
+  cleaned = cleaned.replace(/,\s*$/, '') + '}}';
+}
+return JSON.parse(cleaned);
 }
 
 function mergeResults(gemini, openai) {
