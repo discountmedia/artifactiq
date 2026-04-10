@@ -32,7 +32,7 @@ Return ONLY the JSON, no other text.`;
 
 async function analyzeWithGemini(imageBase64, mimeType, apiKey) {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -43,7 +43,7 @@ async function analyzeWithGemini(imageBase64, mimeType, apiKey) {
             { inline_data: { mime_type: mimeType, data: imageBase64 } }
           ]
         }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
+        generationConfig: { temperature: 0.1, maxOutputTokens: 1500 }
       })
     }
   );
@@ -67,7 +67,7 @@ async function analyzeWithOpenAI(imageBase64, mimeType, apiKey) {
     },
     body: JSON.stringify({
       model: 'gpt-4o',
-      max_tokens: 4096,
+      max_tokens: 1500,
       temperature: 0.1,
       messages: [{
         role: 'user',
