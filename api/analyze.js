@@ -7,7 +7,7 @@ Perform a thorough inspection and respond ONLY with a valid JSON object in this 
   "summary": "<2-3 sentence overall assessment>",
   "issues": ["<specific issue 1>", "<specific issue 2>"],
   "checks": {
-    "limb_count": { "status": "ok" | "warn" | "bad" | "skip", "note": "<brief note>" },`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+    "limb_count": { "status": "ok" | "warn" | "bad" | "skip", "note": "<brief note>" },
     "finger_detail": { "status": "ok" | "warn" | "bad" | "skip", "note": "<brief note>" },
     "face_anatomy": { "status": "ok" | "warn" | "bad" | "skip", "note": "<brief note>" },
     "forklift_forks": { "status": "ok" | "warn" | "bad" | "skip", "note": "<brief note>" },
@@ -32,7 +32,7 @@ Return ONLY the JSON, no other text.`;
 
 async function analyzeWithGemini(imageBase64, mimeType, apiKey) {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
