@@ -552,8 +552,7 @@
       <div class="header-right">
         <div class="header-badges">
           <span class="badge badge-yellow">Dual AI Scan</span>
-          <span class="badge badge-gray">Gemini + ChatGPT</span>
-          <span class="badge badge-gray">Checks AI edits for any artifacts, inconsistencies and atypical features</span>
+          <span class="badge badge-gray">Gemini + ChatGPT Forklift Slop Analyzer</span>
         </div>
         <button class="theme-toggle" id="themeToggle">☀️ Light</button>
       </div>
@@ -804,45 +803,48 @@
     }
 
     function buildAutoPrompt(data) {
-      const confirmedIssues = Object.entries(itemOverrides)
-        .filter(([, v]) => v.action === 'confirm')
-        .map(([k, v]) => v.note || k.replace(/_/g, ' '));
+      const confirmed = Object.entries(itemOverrides)
+        .filter(([, v]) => v.action === 'confirm');
 
-      const aiIssues = (data.issues || []).filter((_, i) => {
-        // Don't include issues that were dismissed
-        return true;
+      const fixes = confirmed.map(([key, val]) => {
+        const userNote = val.note ? val.note.trim() : '';
+        const checkNote = data.checks?.[key]?.note || '';
+
+        const detail = userNote || checkNote;
+
+        switch (key) {
+          case 'operator_seat':
+            return `fix the operator seat — replace with a single standard operator seat${detail ? ` (issue: ${detail})` : ''}`;
+          case 'forklift_forks':
+            return `fix the forks — ensure exactly two standard forks are properly attached to the carriage${detail ? ` (issue: ${detail})` : ''}`;
+          case 'forklift_mast':
+            return `fix the mast — correct the upright mast structure and chain routing to be physically accurate${detail ? ` (issue: ${detail})` : ''}`;
+          case 'wheel_count':
+            return `fix the wheels — ensure correct number and placement of wheels${detail ? ` (issue: ${detail})` : ''}`;
+          case 'limb_count':
+            return `fix the operator's limbs — ensure correct number of arms and legs${detail ? ` (issue: ${detail})` : ''}`;
+          case 'finger_detail':
+            return `fix the operator's hands — ensure normal number of fingers${detail ? ` (issue: ${detail})` : ''}`;
+          case 'face_anatomy':
+            return `fix the operator's face — correct any facial anatomy issues${detail ? ` (issue: ${detail})` : ''}`;
+          case 'text_legibility':
+            return `fix text and labels on the equipment to be legible and correct${detail ? ` (issue: ${detail})` : ''}`;
+          case 'duplicate_objects':
+            return `remove any duplicated or merged components${detail ? ` (issue: ${detail})` : ''}`;
+          case 'proportions':
+            return `correct the proportions of the forklift to be realistic${detail ? ` (issue: ${detail})` : ''}`;
+          case 'lighting_shadows':
+            return `fix inconsistent lighting and shadows to match a single light source${detail ? ` (issue: ${detail})` : ''}`;
+          case 'background_coherence':
+            return `fix background inconsistencies${detail ? ` (issue: ${detail})` : ''}`;
+          default:
+            return `fix ${key.replace(/_/g, ' ')}${detail ? `: ${detail}` : ''}`;
+        }
       });
 
-      const allIssues = [...new Set([...confirmedIssues, ...aiIssues])];
+      if (fixes.length === 0) return 'Edit this image to fix any visual artifacts or anatomical issues. Keep the same background, lighting, and overall composition.';
 
-      let prompt = `Professional product photograph of a forklift, industrial warehouse setting, clean white background, realistic lighting, high detail, commercial photography style.`;
-
-      if (allIssues.length > 0) {
-        prompt += ` Ensure the following are correct: `;
-        prompt += allIssues.map(issue => {
-          const i = issue.toLowerCase();
-          if (i.includes('seat') || i.includes('operator')) return 'single operator seat only';
-          if (i.includes('fork')) return 'exactly two standard forks, properly attached to carriage';
-          if (i.includes('mast')) return 'standard upright mast with correct chain routing';
-          if (i.includes('wheel')) return 'four wheels, correctly positioned';
-          if (i.includes('limb') || i.includes('arm')) return 'operator with correct anatomy, two arms, two legs';
-          if (i.includes('finger')) return 'operator hands with correct number of fingers';
-          if (i.includes('face')) return 'operator with natural face anatomy';
-          if (i.includes('text') || i.includes('label')) return 'legible text and labels on equipment';
-          if (i.includes('duplicate')) return 'no duplicated components or merged objects';
-          if (i.includes('proportion')) return 'realistic proportions throughout';
-          return issue;
-        }).join(', ') + '.';
-      }
-
-      prompt += ` No artifacts, no extra limbs, no duplicate parts. Photorealistic, sharp focus.`;
-      return prompt;
-    }
-
-    function checkAllFilled() {
-      const total = document.querySelectorAll('.check-item').length;
-      const filled = Object.keys(itemOverrides).length;
-      return total > 0 && filled >= total;
+      return `Edit this exact image to make the following corrections only — do not change the background, composition, camera angle, or overall scene:\n\n${fixes.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\nKeep everything else identical to the original image.`;
     }
 
     function maybeShowRegen() {
@@ -927,11 +929,21 @@
       const grid = document.getElementById('checklistGrid');
       grid.innerHTML = '';
 
+      const HUMAN_CHECKS = ['limb_count', 'finger_detail', 'face_anatomy'];
+      const hasHumans = data.checks &&
+        HUMAN_CHECKS.some(k => data.checks[k] && data.checks[k].status !== 'skip');
+
       if (data.checks) {
         const entries = Object.entries(data.checks);
-        totalCheckItems = entries.length;
+        totalCheckItems = entries.filter(([key]) => {
+          if (HUMAN_CHECKS.includes(key) && !hasHumans) return false;
+          return true;
+        }).length;
 
         entries.forEach(([key, val]) => {
+          // Hide human checks if no humans in image
+          if (HUMAN_CHECKS.includes(key) && !hasHumans) return;
+
           const item = document.createElement('div');
           item.className = 'check-item';
           item.dataset.key = key;
@@ -1003,32 +1015,7 @@
       img.onload = () => {
         const canvas = document.createElement('canvas');
         canvas.width = TARGET_W; canvas.height = TARGET_H;
-
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, TARGET_W, TARGET_H);
-
-        // Center crop to fill target dimensions without stretching
-        const srcRatio = img.width / img.height;
-        const tgtRatio = TARGET_W / TARGET_H;
-
-        let sx, sy, sw, sh;
-        if (srcRatio > tgtRatio) {
-          // Image is wider — crop sides
-          sh = img.height;
-          sw = Math.round(img.height * tgtRatio);
-          sx = Math.round((img.width - sw) / 2);
-          sy = 0;
-        } else {
-          // Image is taller — crop top/bottom
-          sw = img.width;
-          sh = Math.round(img.width / tgtRatio);
-          sx = 0;
-          sy = Math.round((img.height - sh) / 2);
-        }
-
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, TARGET_W, TARGET_H);
-
+        canvas.getContext('2d').drawImage(img, 0, 0, TARGET_W, TARGET_H);
         let quality = 0.9;
         function tryCompress() {
           const dataUrl = canvas.toDataURL('image/jpeg', quality);
