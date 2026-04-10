@@ -20,17 +20,17 @@ export default async function handler(req, res) {
       const openai = new OpenAI({ apiKey });
 
       const response = await openai.images.generate({
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-1',
         prompt: prompt,
         n: 1,
-        size: '1280x720',
-        response_format: 'b64_json'
+        size: '1536x1024'
       });
 
       const base64Data = response.data[0].b64_json;
-      if (!base64Data) throw new Error('No image returned from OpenAI');
+      const imageUrl = response.data[0].url;
+      if (!base64Data && !imageUrl) throw new Error('No image returned from OpenAI');
 
-      return res.status(200).json({ imageBase64: base64Data });
+      return res.status(200).json({ imageBase64: base64Data, imageUrl });
 
     } else if (engine === 'gemini') {
       const apiKey = process.env.GEMINI_API_KEY;
