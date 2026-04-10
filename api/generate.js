@@ -1,4 +1,10 @@
 export default async function handler(req, res) {
+  // Handle CORS preflight
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { engine, prompt, imageBase64, mimeType } = req.body;
@@ -10,7 +16,6 @@ export default async function handler(req, res) {
       if (!apiKey) return res.status(500).json({ error: 'OpenAI API key not configured' });
 
       if (imageBase64) {
-        // Use image edit endpoint with original image as reference
         const imgMime = mimeType || 'image/jpeg';
         const ext = imgMime.includes('png') ? 'png' : 'jpg';
         const imageBuffer = Buffer.from(imageBase64, 'base64');
@@ -19,7 +24,7 @@ export default async function handler(req, res) {
         formData.append('model', 'gpt-image-1');
         formData.append('prompt', prompt);
         formData.append('n', '1');
-        formData.append('size', '1024x1024');
+        formData.append('size', '1792x1024'); // 16:9
         const blob = new Blob([imageBuffer], { type: imgMime });
         formData.append('image[]', blob, `original.${ext}`);
 
@@ -41,11 +46,11 @@ export default async function handler(req, res) {
         return res.status(200).json({ imageBase64: imageB64, imageUrl });
       }
 
-      // Fallback: no image provided
+      // Fallback: no image
       const response = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: 'gpt-image-1', prompt, n: 1, size: '1024x1024' })
+        body: JSON.stringify({ model: 'gpt-image-1', prompt, n: 1, size: '1792x1024' })
       });
 
       if (!response.ok) {
@@ -63,8 +68,6 @@ export default async function handler(req, res) {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) return res.status(500).json({ error: 'Gemini API key not configured' });
 
-      // Use Nano Banana 2 (gemini-3.1-flash-image-preview) which supports
-      // native image editing by passing the original image as inline_data
       const parts = [{ text: prompt }];
 
       if (imageBase64) {
@@ -84,7 +87,10 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             contents: [{ parts }],
             generationConfig: {
-              responseModalities: ['TEXT', 'IMAGE']
+              responseModalities: ['TEXT', 'IMAGE'],
+              imageConfig: {
+                aspectRatio: '16:9'
+              }
             }
           })
         }
@@ -97,12 +103,11 @@ export default async function handler(req, res) {
 
       const data = await response.json();
 
-      // Find the image part in the response (skip thought parts)
       const imagePart = data.candidates?.[0]?.content?.parts?.find(
         p => p.inline_data && p.inline_data.mime_type?.startsWith('image/') && !p.thought
       );
 
-      if (!imagePart) throw new Error('No image returned from Gemini Nano Banana 2');
+      if (!imagePart) throw new Error('No image returned from Nano Banana 2');
 
       return res.status(200).json({ imageBase64: imagePart.inline_data.data });
 

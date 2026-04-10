@@ -659,7 +659,7 @@
             <span>🟢</span> DALL-E 3 (ChatGPT)
           </button>
           <button class="engine-btn gemini" id="engineGemini">
-            <span>🔵</span> Nano Banana 2
+            <span>🔵</span> Nano Banana 2 (Gemini)
           </button>
           <button class="engine-btn both active both" id="engineBoth">
             <span>⚡</span> Both — Side by Side
@@ -1088,7 +1088,7 @@
         panel.id = `gen-panel-${engine}`;
         panel.innerHTML = `
           <div class="gen-panel-header ${engine}">
-            ${engine === 'dalle' ? '🟢 DALL-E 3 (ChatGPT)' : '🔵 Nano Banana 2'}
+            ${engine === 'dalle' ? '🟢 DALL-E 3 (ChatGPT)' : '🔵 Nano Banana 2 (Gemini)'}
           </div>
           <div class="gen-img-wrap" id="gen-img-${engine}">
             <div class="gen-spinner ${engine}"></div>
