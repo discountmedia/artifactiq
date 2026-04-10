@@ -283,6 +283,15 @@
     .check-feedback-input:focus { border-color: var(--accent); }
     .check-feedback-input.visible { display: block; }
 
+    .override-label {
+      display: none; margin-top: 8px; padding: 6px 10px;
+      border-radius: 6px; font-size: 11px; font-weight: 600;
+    }
+
+    .override-label.visible { display: block; }
+    .override-label.confirmed { background: var(--fail-bg); color: var(--fail); border: 1px solid var(--fail-border); }
+    .override-label.dismissed { background: var(--pass-bg); color: var(--pass); border: 1px solid var(--pass-border); }
+
     .issue-item {
       display: flex; gap: 12px; padding: 12px 0;
       border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.6;
@@ -853,7 +862,6 @@
       const prompt = buildAutoPrompt(currentData);
       document.getElementById('regenPrompt').value = prompt;
       document.getElementById('regenSection').classList.add('visible');
-      document.getElementById('regenSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     function renderResults(data) {
@@ -955,10 +963,11 @@
             </div>
             ${val.note ? `<div class="check-note">${val.note}</div>` : ''}
             <div class="check-overrides">
-              <button class="override-btn confirm" data-key="${key}" data-action="confirm">✕ Yes, this is an issue</button>
-              <button class="override-btn dismiss" data-key="${key}" data-action="dismiss">✓ AI is wrong, ignore</button>
+              <button class="override-btn confirm" data-key="${key}" data-action="confirm" data-ai-status="${val.status}">✕ Yes, this is an issue</button>
+              <button class="override-btn dismiss" data-key="${key}" data-action="dismiss" data-ai-status="${val.status}">✓ AI is wrong, ignore</button>
             </div>
-            <input type="text" class="check-feedback-input" data-key="${key}" placeholder="Why? (optional)" />
+            <input type="text" class="check-feedback-input" data-key="${key}" placeholder="Add a note about this issue (optional)" />
+            <div class="override-label" data-key="${key}"></div>
           `;
           grid.appendChild(item);
         });
@@ -967,15 +976,34 @@
           btn.addEventListener('click', () => {
             const key = btn.dataset.key;
             const action = btn.dataset.action;
+            const aiStatus = btn.dataset.aiStatus;
             const item = grid.querySelector(`.check-item[data-key="${key}"]`);
+
             item.querySelectorAll('.override-btn').forEach(s => s.classList.remove('active'));
             btn.classList.add('active');
+
             const noteInput = item.querySelector('.check-feedback-input');
-            noteInput.classList.add('visible');
+            const overrideLabel = item.querySelector('.override-label');
+            const aiSaidBad = aiStatus === 'bad' || aiStatus === 'warn';
+
+            if (action === 'confirm') {
+              noteInput.classList.add('visible');
+              overrideLabel.className = 'override-label visible confirmed';
+              overrideLabel.textContent = aiSaidBad
+                ? '⚠ Confirmed — you agree this is an issue'
+                : '✕ User flagged as incorrect — AI missed this issue';
+            } else {
+              noteInput.classList.remove('visible');
+              noteInput.value = '';
+              overrideLabel.className = 'override-label visible dismissed';
+              overrideLabel.textContent = aiSaidBad
+                ? '✓ User flagged as correct — AI was wrong about this'
+                : '✓ No issue here';
+            }
+
             itemOverrides[key] = { action, note: noteInput.value };
             noteInput.addEventListener('input', () => { itemOverrides[key].note = noteInput.value; });
             document.getElementById('feedbackSection').classList.add('visible');
-            // Check if all filled
             maybeShowRegen();
           });
         });
@@ -1083,7 +1111,7 @@
         const response = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ engine, prompt })
+          body: JSON.stringify({ engine, prompt, imageBase64: currentBase64, mimeType: currentFile?.type || 'image/jpeg' })
         });
 
         const data = await response.json();
